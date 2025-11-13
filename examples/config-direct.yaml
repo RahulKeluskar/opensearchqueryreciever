@@ -1,0 +1,107 @@
+# Example configuration for OpenSearch Query Receiver in Direct Mode
+# This configuration connects directly to OpenSearch with basic authentication
+
+receivers:
+  # OpenSearch Query Receiver configuration
+  opensearchquery:
+    # Mode: "direct" for direct connection to OpenSearch
+    mode: direct
+
+    # OpenSearch endpoint
+    endpoint: https://localhost:9200
+
+    # Basic authentication credentials
+    username: admin
+    password: admin
+
+    # Index pattern to query (supports wildcards)
+    index_pattern: "logs-*"
+
+    # Time field used for time-based queries
+    time_field: "@timestamp"
+
+    # How far back to look for data
+    lookback_period: 5m
+
+    # Collection interval (how often to run queries)
+    collection_interval: 60s
+
+    # Timeout for each query
+    timeout: 30s
+
+    # TLS configuration (optional) I dont think we'll need this for local testing
+    # nor do we use this for proxy mode as that logic will live in server.py that HAJO contributed to.
+    tls:
+      insecure_skip_verify: true # Set to false in production
+      # ca_file: /path/to/ca.crt
+      # cert_file: /path/to/client.crt
+      # key_file: /path/to/client.key
+
+    # List of queries to execute
+    queries:
+      # Simple count query
+      - name: error_count
+        description: "Count of error-level logs"
+        metric_name: "logs.errors"
+        query:
+          match:
+            level: "ERROR"
+        labels:
+          severity: "error"
+          source: "application"
+
+      # Query with bool logic
+      - name: critical_errors
+        description: "Critical errors in production"
+        metric_name: "logs.critical_errors"
+        query:
+          bool:
+            must:
+              - match:
+                  level: "ERROR"
+              - match:
+                  environment: "production"
+            filter:
+              - term:
+                  severity.keyword: "critical"
+        labels:
+          severity: "critical"
+          environment: "production"
+
+      # Query with aggregation
+      - name: logs_by_service
+        description: "Log counts grouped by service"
+        metric_name: "logs.by_service"
+        query:
+          match_all: {}
+        labels:
+          type: "aggregation"
+
+processors:
+  # Batch processor to reduce number of export requests
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+exporters:
+  # Debug exporter for testing (prints to stdout)
+  debug:
+    verbosity: detailed
+
+  # OTLP exporter (uncomment to send to another collector or backend)
+  # otlp:
+  #   endpoint: localhost:4317
+  #   tls:
+  #     insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [opensearchquery]
+      processors: [batch]
+      exporters: [debug]
+
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: info

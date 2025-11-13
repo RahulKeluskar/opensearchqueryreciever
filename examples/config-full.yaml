@@ -1,0 +1,259 @@
+# Complete example configuration showing all available options
+# for the OpenSearch Query Receiver
+
+receivers:
+  opensearchquery:
+    # Required: Operational mode
+    # Values: "direct" or "proxy"
+    mode: direct
+
+    # Direct mode settings
+    endpoint: https://opensearch.example.com:9200
+    username: admin
+    password: secretpassword
+
+    # Proxy mode settings (use instead of direct mode)
+    # proxy_endpoint: http://oauth-proxy.example.com:8080
+
+    # Required: Index pattern to query
+    index_pattern: "logs-2024.*"
+
+    # Optional: Time field for range queries (default: "@timestamp")
+    time_field: "@timestamp"
+
+    # Optional: Lookback period for time-based queries (default: 5m)
+    lookback_period: 15m
+
+    # Optional: Collection interval (default: 60s)
+    collection_interval: 30s
+
+    # Optional: Initial delay before first collection (default: 1s)
+    initial_delay: 5s
+
+    # Optional: Request timeout (default: 30s)
+    timeout: 45s
+
+    # Optional: HTTP client settings
+    read_buffer_size: 0
+    write_buffer_size: 0
+    max_idle_conns: 100
+    max_idle_conns_per_host: 10
+    max_conns_per_host: 0
+    idle_conn_timeout: 90s
+
+    # Optional: TLS configuration
+    tls:
+      insecure: false
+      insecure_skip_verify: false
+      ca_file: /etc/ssl/certs/ca.crt
+      cert_file: /etc/ssl/certs/client.crt
+      key_file: /etc/ssl/private/client.key
+      min_version: "1.2"
+      max_version: "1.3"
+
+    # Optional: Custom headers
+    headers:
+      User-Agent: "OpenTelemetry-Collector/0.95.0"
+      X-Custom-Header: "custom-value"
+
+    # Required: List of queries to execute
+    queries:
+      # Example 1: Simple match query
+      - name: error_logs
+        description: "Count of error-level log entries"
+        metric_name: "logs.errors.count"
+        query:
+          match:
+            level: "ERROR"
+        labels:
+          severity: "error"
+          team: "platform"
+
+      # Example 2: Bool query with multiple conditions
+      - name: critical_api_errors
+        description: "Critical errors from API service"
+        metric_name: "api.critical_errors"
+        query:
+          bool:
+            must:
+              - match:
+                  service: "api"
+              - match:
+                  level: "ERROR"
+            filter:
+              - term:
+                  severity.keyword: "critical"
+              - range:
+                  response_time_ms:
+                    gte: 5000
+        labels:
+          service: "api"
+          severity: "critical"
+          alert: "true"
+
+      # Example 3: Query with term aggregation
+      - name: logs_by_level
+        description: "Log counts grouped by level"
+        metric_name: "logs.by_level"
+        query:
+          match_all: {}
+        labels:
+          type: "distribution"
+
+      # Example 4: Query with date histogram aggregation
+      - name: logs_over_time
+        description: "Log distribution over time"
+        metric_name: "logs.timeline"
+        query:
+          bool:
+            must:
+              - match:
+                  environment: "production"
+
+      # Example 5: Exists query
+      - name: logs_with_user_id
+        description: "Logs that contain user_id field"
+        metric_name: "logs.authenticated"
+        query:
+          exists:
+            field: "user_id"
+        labels:
+          authenticated: "true"
+
+      # Example 6: Wildcard query
+      - name: api_endpoints
+        description: "Logs matching API endpoint pattern"
+        metric_name: "api.endpoint_hits"
+        query:
+          wildcard:
+            path.keyword:
+              value: "/api/v1/*"
+        labels:
+          api_version: "v1"
+
+      # Example 7: Range query
+      - name: slow_requests
+        description: "Requests with response time > 1s"
+        metric_name: "api.slow_requests"
+        query:
+          range:
+            response_time_ms:
+              gte: 1000
+        labels:
+          performance: "slow"
+          slo_breach: "true"
+
+      # Example 8: Complex nested query
+      - name: payment_failures
+        description: "Failed payment transactions"
+        metric_name: "payments.failures"
+        query:
+          bool:
+            must:
+              - match:
+                  transaction_type: "payment"
+              - match:
+                  status: "failed"
+            should:
+              - match:
+                  error_code: "insufficient_funds"
+              - match:
+                  error_code: "card_declined"
+            minimum_should_match: 1
+            must_not:
+              - match:
+                  test_mode: "true"
+        labels:
+          domain: "payments"
+          alert_priority: "high"
+
+processors:
+  # Batch processor for efficient export
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Attributes processor to add common labels
+  attributes:
+    actions:
+      - key: deployment.environment
+        value: production
+        action: insert
+      - key: service.name
+        value: opensearch-query-receiver
+        action: insert
+
+exporters:
+  # Debug exporter for development
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # OTLP exporter to send to backend
+  otlp:
+    endpoint: collector.example.com:4317
+    tls:
+      insecure: false
+      ca_file: /etc/ssl/certs/ca.crt
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # OTLP HTTP exporter (alternative)
+  otlphttp:
+    endpoint: https://otlp.example.com:4318
+    tls:
+      insecure: false
+    headers:
+      Authorization: "Bearer ${OTLP_TOKEN}"
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: ":13133"
+
+  # Performance profiling
+  pprof:
+    endpoint: ":1777"
+
+  # Zpages for debugging
+  zpages:
+    endpoint: ":55679"
+
+service:
+  # Extensions to enable
+  extensions: [health_check, pprof, zpages]
+
+  # Pipeline configuration
+  pipelines:
+    metrics:
+      receivers: [opensearchquery]
+      processors: [memory_limiter, batch, attributes]
+      exporters: [debug, otlp]
+
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: info
+      development: false
+      encoding: json
+      output_paths:
+        - stdout
+      error_output_paths:
+        - stderr
+    metrics:
+      level: detailed
+      address: ":8888"

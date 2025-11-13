@@ -1,0 +1,113 @@
+# Example configuration for OpenSearch Query Receiver in Proxy Mode
+# This configuration connects through an OAuth2 authentication proxy
+
+receivers:
+  # OpenSearch Query Receiver configuration
+  opensearchquery:
+    # Mode: "proxy" for connection through OAuth2 proxy
+    mode: proxy
+
+    # Proxy endpoint (the proxy handles authentication and forwards to OpenSearch)
+    proxy_endpoint: http://localhost:8080
+
+    # Index pattern to query (supports wildcards)
+    index_pattern: "logs-*"
+
+    # Time field used for time-based queries
+    time_field: "@timestamp"
+
+    # How far back to look for data
+    lookback_period: 5m
+
+    # Collection interval (how often to run queries)
+    collection_interval: 60s
+
+    # Timeout for each query
+    timeout: 30s
+
+    # List of queries to execute
+    queries:
+      # Query for application errors
+      - name: app_errors
+        description: "Application error count"
+        metric_name: "app.errors"
+        query:
+          bool:
+            must:
+              - match:
+                  log_type: "application"
+              - match:
+                  level: "ERROR"
+        labels:
+          team: "platform"
+          service: "api"
+
+      # Query for authentication failures
+      - name: auth_failures
+        description: "Failed authentication attempts"
+        metric_name: "security.auth_failures"
+        query:
+          bool:
+            must:
+              - match:
+                  event_type: "authentication"
+              - match:
+                  status: "failure"
+        labels:
+          security_event: "true"
+          alert_level: "high"
+
+      # Query with complex aggregation
+      - name: response_time_stats
+        description: "API response time statistics"
+        metric_name: "api.response_time"
+        query:
+          bool:
+            must:
+              - match:
+                  service: "api-gateway"
+            filter:
+              - exists:
+                  field: "response_time_ms"
+        labels:
+          metric_type: "performance"
+
+processors:
+  # Batch processor
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  # Debug exporter for testing
+  debug:
+    verbosity: detailed
+
+  # OTLP HTTP exporter (for Prometheus, etc.)
+  # otlphttp:
+  #   endpoint: http://localhost:4318
+  #   tls:
+  #     insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [opensearchquery]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: ":8888"
+
+  # Extensions for health checks and monitoring
+  extensions: []
