@@ -1,0 +1,30 @@
+# OpenTelemetry Collector Builder Configuration
+# This file is used by the OpenTelemetry Collector Builder (ocb)
+# to create a custom collector binary with the OpenSearch Query Receiver
+
+dist:
+  name: otelcol-opensearchquery
+  description: OpenTelemetry Collector with OpenSearch Query Receiver
+  output_path: ./dist
+  otelcol_version: 0.95.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.95.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.95.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.95.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.95.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.95.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.95.0
+  # Custom OpenSearch Query Receiver
+  - gomod: github.com/opensearchqueryreceiver v0.1.0
+    path: .
+
+extensions:
+  - gomod: go.opentelemetry.io/collector/extension/ballastextension v0.95.0
+  - gomod: go.opentelemetry.io/collector/extension/zpagesextension v0.95.0
+
+connectors: []
