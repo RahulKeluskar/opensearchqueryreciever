@@ -16,7 +16,16 @@ See [QUICKSTART.md](QUICKSTART.md) for a 5-minute setup guide.
 
 ## Installation
 
-See [INSTALL.md](INSTALL.md) for detailed installation instructions.
+```bash
+# Build from source
+make build
+
+# Or use OpenTelemetry Collector Builder
+make builder
+
+# Install to $GOPATH/bin
+make install
+```
 
 ## Configuration
 
